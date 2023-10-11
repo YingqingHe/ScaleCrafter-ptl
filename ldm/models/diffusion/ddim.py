@@ -1,11 +1,11 @@
 """SAMPLING ONLY."""
-
+import math
 import torch
 import numpy as np
 from tqdm import tqdm
 
 from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, make_ddim_timesteps, noise_like, extract_into_tensor
-
+from redilation import make_dilate_model
 
 class DDIMSampler(object):
     def __init__(self, model, schedule="linear", device=torch.device("cuda"), **kwargs):
@@ -116,7 +116,8 @@ class DDIMSampler(object):
                                                     unconditional_guidance_scale=unconditional_guidance_scale,
                                                     unconditional_conditioning=unconditional_conditioning,
                                                     dynamic_threshold=dynamic_threshold,
-                                                    ucg_schedule=ucg_schedule
+                                                    ucg_schedule=ucg_schedule,
+                                                    **kwargs
                                                     )
         return samples, intermediates
 
@@ -127,7 +128,7 @@ class DDIMSampler(object):
                       mask=None, x0=None, img_callback=None, log_every_t=100,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None, dynamic_threshold=None,
-                      ucg_schedule=None):
+                      ucg_schedule=None, **kwargs):
         device = self.model.betas.device
         b = shape[0]
         if x_T is None:
@@ -167,7 +168,9 @@ class DDIMSampler(object):
                                       corrector_kwargs=corrector_kwargs,
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
-                                      dynamic_threshold=dynamic_threshold)
+                                      dynamic_threshold=dynamic_threshold,
+                                      timestep_index=i,
+                                      **kwargs)
             img, pred_x0 = outs
             if callback: callback(i)
             if img_callback: img_callback(pred_x0, i)
@@ -182,8 +185,33 @@ class DDIMSampler(object):
     def p_sample_ddim(self, x, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None,
-                      dynamic_threshold=None):
+                      dynamic_threshold=None, 
+                      # redilation
+                      dilate=None, dilate_tau=None, dilate_skip=None, 
+                      progress_dilate=False,
+                      dilate_cfg=None, dilate_cfg_skip=None,
+                      timestep_index=None,
+                      **kwargs):
         b, *_, device = *x.shape, x.device
+        
+        # redilation
+        enable_dilate = (dilate is not None)
+        if enable_dilate:
+            if (self.ddim_timesteps.shape[0]-index) > dilate_tau:
+                # close dilation in later denoising
+                enable_dilate = False
+            else:
+                if progress_dilate:
+                    # adjust the dilation factor progressively
+                    assert(timestep_index is not None)
+                    dilate_list = list(range(2, math.ceil(dilate)+1))[::-1]
+                    n_stage = len(dilate_list)
+                    n_times_stage = math.ceil(dilate_tau / n_stage)
+                    stage_index = (timestep_index+1) // n_times_stage
+                    if stage_index > n_stage-1:
+                        stage_index = n_stage-1
+                    dilate = dilate_list[stage_index]
+            make_dilate_model(self.model, enable_dilate=enable_dilate, dilate=dilate, nskip=dilate_skip)
 
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
             model_output = self.model.apply_model(x, t, c)

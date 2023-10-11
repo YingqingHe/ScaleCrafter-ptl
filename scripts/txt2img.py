@@ -1,4 +1,5 @@
-import argparse, os
+import argparse, os, sys
+sys.path.insert(0, os.getcwd())
 import cv2
 import torch
 import numpy as np
@@ -199,6 +200,36 @@ def parse_args():
         action='store_true',
         help="Use bfloat16",
     )
+    # redilation
+    parser.add_argument(
+        "--dilate",
+        type=int,
+        default=None,
+        help="redilation factor",
+    )
+    parser.add_argument(
+        "--dilate_tau",
+        type=int,
+        default=None,
+        help="timestep control, larger means more dilations",
+    )
+    parser.add_argument(
+        "--dilate_skip",
+        type=int,
+        default=None,
+        help="layer control, larger means less dilations",
+    )
+    parser.add_argument(
+        "--progressive_dilate",
+        action='store_true',
+        help="Use progressive dilate",
+    )
+    parser.add_argument(
+        "--tiled_decoding",
+        action='store_true',
+        help="Use progressive dilate",
+    )
+
     opt = parser.parse_args()
     return opt
 
@@ -352,9 +383,19 @@ def main(opt):
                                                      unconditional_guidance_scale=opt.scale,
                                                      unconditional_conditioning=uc,
                                                      eta=opt.ddim_eta,
-                                                     x_T=start_code)
+                                                     x_T=start_code,
+                                                     # redilation
+                                                     dilate=opt.dilate,
+                                                     dilate_tau=opt.dilate_tau,
+                                                     dilate_skip=opt.dilate_skip,
+                                                     progressive_dilate=opt.progressive_dilate
+                                                     )
 
-                    x_samples = model.decode_first_stage(samples)
+                    if opt.tiled_decoding:
+                        # coming soon
+                        pass
+                    else:
+                        x_samples = model.decode_first_stage(samples)
                     x_samples = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
 
                     for x_sample in x_samples:
@@ -376,7 +417,9 @@ def main(opt):
             grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
             grid = Image.fromarray(grid.astype(np.uint8))
             grid = put_watermark(grid, wm_encoder)
-            grid.save(os.path.join(outpath, f'grid-{grid_count:04}.png'))
+            grid.save(os.path.join(outpath, 
+                                   f'grid-{grid_count:04}-{opt.prompt.replace(" ", "-")}-seed{opt.seed}.png')
+                                   )
             grid_count += 1
 
     print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
