@@ -25,9 +25,20 @@ _**[Yingqing He*](https://github.com/YingqingHe), [Shaoshu Yang*](), [Haoxin Che
 - __[2023.10.12]__: 🔥 Release paper and source code.
 <br>
 
-<!-- ## ⏳ TODO
--  -->
+## ⏳ TODO
+- [ ] sampling scripts of other resolutions
 
 
 ## ⚙️ Setup
-Comming soon
+```bash
+conda create -n scalecrafter-ptl python=3.8.5
+conda activate scalecrafter
+pip install -r requirements.txt
+```
+
+---
+
+## 💫 Inference
+```
+bash shellscripts/sample_1024x1024.sh
+```
