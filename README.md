@@ -35,10 +35,50 @@ conda create -n scalecrafter-ptl python=3.8.5
 conda activate scalecrafter
 pip install -r requirements.txt
 ```
-
+download checkpoint
+```
+mkdir checkpoints
+wget -O checkpoints/v2-1_512-ema-pruned.ckpt https://huggingface.co/stabilityai/stable-diffusion-2-1-base/resolve/main/v2-1_512-ema-pruned.ckpt
+```
 ---
 
 ## 💫 Inference
 ```
 bash shellscripts/sample_1024x1024.sh
+```
+
+## 🔮 Tiled VAE decoding with SyncGN
+<div>
+Input prompt: "A corgi sits on a beach chair on a beautiful beach, with palm trees behind, high details"
+Results:
+<table class="center">
+  <tr>
+  <td><img src=assets/decode/1-wo-overlap-wo-gn.png width="320"></td>
+  <td><img src=assets/decode/2-w-overlap-wo-gn.png width="320"></td>
+  <td><img src=assets/decode/3-wo-overlap-w-gn.png width="320"></td>
+  <td><img src=assets/decode/4-w-overlap-w-gn.png width="320"></td>
+  <tr>
+  <td style="text-align:center;" width="320">"w/o overlap; w/o syncGN"</td>
+  <td style="text-align:center;" width="320">"w/ overlap; w/o syncGN"</td>
+  <td style="text-align:center;" width="320">"w/o overlap; w/ syncGN"</td>
+  <td style="text-align:center;" width="320">"w/ overlap; w/ syncGN"</td>
+  <tr>
+</table >
+
+For sampling with overlapped tiled decoding and SyncGN, just add: `--tiled_decoding --sync_gn`. For disabling the overlapped tiling, set `--overlap 0`.
+
+Full commands:
+
+```
+python scripts/txt2img.py \
+--prompt "A corgi sits on a beach chair on a beautiful beach, with palm trees behind, high details" \
+--ckpt checkpoints/v2-1_512-ema-pruned.ckpt \
+--config configs/stable-diffusion/v2-inference.yaml \
+--device cuda \
+--ddim_eta 1 \
+--scale 9 --seed 51 --H 1024 --W 1024 \
+--dilate 2 --dilate_tau 20 --dilate_skip 4 \
+--n_iter 1 --n_samples 1 \
+--outdir $outdir \
+--tiled_decoding --sync_gn
 ```

@@ -824,7 +824,14 @@ class LatentDiffusion(DDPM):
 
         z = 1. / self.scale_factor * z
         return self.first_stage_model.decode(z)
-
+    
+    @torch.no_grad()
+    def decode_first_stage_tiles(self, z, predict_cids=False, force_not_quantize=False):
+        assert(isinstance(z, (list, tuple)))
+        assert(predict_cids is False)
+        z = [1. / self.scale_factor * z_ for z_ in z]
+        return self.first_stage_model.decode_tiles(z)
+    
     @torch.no_grad()
     def encode_first_stage(self, x):
         return self.first_stage_model.encode(x)

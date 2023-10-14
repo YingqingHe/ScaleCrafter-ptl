@@ -3,12 +3,12 @@ import pytorch_lightning as pl
 import torch.nn.functional as F
 from contextlib import contextmanager
 
-from ldm.modules.diffusionmodules.model import Encoder, Decoder
+from ldm.modules.diffusionmodules.model import Encoder
 from ldm.modules.distributions.distributions import DiagonalGaussianDistribution
 
 from ldm.util import instantiate_from_config
 from ldm.modules.ema import LitEma
-
+from tiled_decode import make_conv
 
 class AutoencoderKL(pl.LightningModule):
     def __init__(self,
@@ -21,17 +21,31 @@ class AutoencoderKL(pl.LightningModule):
                  colorize_nlabels=None,
                  monitor=None,
                  ema_decay=None,
-                 learn_logvar=False
+                 learn_logvar=False,
+                 tiled=False,
                  ):
         super().__init__()
         self.learn_logvar = learn_logvar
         self.image_key = image_key
+        self.tiled = tiled
+
+        if tiled:
+            from ldm.modules.diffusionmodules.model_tiled import Decoder
+        else:
+            from ldm.modules.diffusionmodules.model import Decoder
+
         self.encoder = Encoder(**ddconfig)
         self.decoder = Decoder(**ddconfig)
         self.loss = instantiate_from_config(lossconfig)
         assert ddconfig["double_z"]
         self.quant_conv = torch.nn.Conv2d(2*ddconfig["z_channels"], 2*embed_dim, 1)
-        self.post_quant_conv = torch.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
+        
+        if tiled:
+            self.post_quant_conv = make_conv(embed_dim, ddconfig["z_channels"], tiled=tiled, kernel_size=1)
+        else:
+            # original post_quant_conv
+            self.post_quant_conv = torch.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
+        
         self.embed_dim = embed_dim
         if colorize_nlabels is not None:
             assert type(colorize_nlabels)==int
@@ -89,6 +103,10 @@ class AutoencoderKL(pl.LightningModule):
         z = self.post_quant_conv(z)
         dec = self.decoder(z)
         return dec
+    
+    def decode_tiles(self, z):
+        assert(self.tiled)
+        return self.decode(z)
 
     def forward(self, input, sample_posterior=True):
         posterior = self.encode(input)

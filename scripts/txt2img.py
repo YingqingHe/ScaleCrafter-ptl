@@ -18,6 +18,7 @@ from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 from ldm.models.diffusion.dpm_solver import DPMSolverSampler
+from tiled_decode import tiled_vae_decoding
 
 torch.set_grad_enabled(False)
 
@@ -229,7 +230,18 @@ def parse_args():
         action='store_true',
         help="Use progressive dilate",
     )
-
+    parser.add_argument(
+        "--overlap",
+        type=int,
+        default=24,
+        help="length of overlapped regions",
+    )
+    parser.add_argument(
+        "--sync_gn",
+        action='store_true',
+        help="Use sync_gn",
+    )
+    
     opt = parser.parse_args()
     return opt
 
@@ -247,6 +259,11 @@ def main(opt):
 
     config = OmegaConf.load(f"{opt.config}")
     device = torch.device("cuda") if opt.device == "cuda" else torch.device("cpu")
+    if opt.tiled_decoding:
+        config.model.params.first_stage_config.params.tiled = True
+    if opt.sync_gn:
+        config.model.params.first_stage_config.params.ddconfig.sync_gn = True
+
     model = load_model_from_config(config, f"{opt.ckpt}", device)
 
     if opt.plms:
@@ -392,8 +409,8 @@ def main(opt):
                                                      )
 
                     if opt.tiled_decoding:
-                        # coming soon
-                        pass
+                        bb,cc,hh,ww = samples.shape
+                        x_samples = tiled_vae_decoding(model, samples, window_size=hh//2, overlap=opt.overlap, sync_gn=opt.sync_gn)
                     else:
                         x_samples = model.decode_first_stage(samples)
                     x_samples = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
