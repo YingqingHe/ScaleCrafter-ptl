@@ -35,7 +35,7 @@ conda create -n scalecrafter-ptl python=3.8.5
 conda activate scalecrafter
 pip install -r requirements.txt
 ```
-download checkpoint
+Download checkpoint:
 ```
 mkdir checkpoints
 wget -O checkpoints/v2-1_512-ema-pruned.ckpt https://huggingface.co/stabilityai/stable-diffusion-2-1-base/resolve/main/v2-1_512-ema-pruned.ckpt
