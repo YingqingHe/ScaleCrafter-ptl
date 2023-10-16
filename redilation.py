@@ -15,7 +15,7 @@ def recover_dilate_module(module):
 
 def make_dilate_model(model, enable_dilate=False, dilate=2, nskip=3):
     if not enable_dilate:
-        recover_dilate_module(model)
+        recover_dilate_module(model.model.diffusion_model)
     else:
         nin = 0
         for inblock in model.model.diffusion_model.input_blocks:
